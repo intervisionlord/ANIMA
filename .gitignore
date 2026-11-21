@@ -3,3 +3,4 @@ memory/
 opencode.json
 __pycache__/
 *.pyc
+cliff.toml
