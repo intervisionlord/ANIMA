@@ -8,7 +8,7 @@
 
 **Каркас, который становится кем-то, когда в него вселяют память**
 
-![Версия](https://img.shields.io/github/v/tag/intervisionlord/ANIMA?style=flat-square&logo=semver&logoColor=white&color=22C55E&label=version)
+![Версия](https://img.shields.io/github/v/release/intervisionlord/ANIMA?style=flat-square&logo=semver&logoColor=white&color=22C55E&label=version)
 ![Python](https://img.shields.io/badge/Python-3.12-3776AB?style=flat-square&logo=python&logoColor=white)
 ![OpenCode](https://img.shields.io/badge/OpenCode-plugins-00D2A8?style=flat-square)
 ![Платформы](https://img.shields.io/badge/platform-Windows%20%7C%20Linux%20%7C%20macOS-4B5563?style=flat-square)
@@ -194,7 +194,13 @@ flowchart TD
 ```
 .
 ├── AGENTS.md              правила хода — то, что видит модель
-├── memory.py              поиск, запись, дедупликация
+├── memory.py              точка входа CLI — вызов из плагина
+├── anima/                 движок: логика отделена от входа
+│   ├── constants.py       пути, категории, пороги и веса
+│   ├── strings.py         тексты CLI и сообщения
+│   ├── storage.py         чтение, запись, нумерация записей
+│   ├── resonance.py       синонимы, скоринг, поиск
+│   └── ops.py             память, желания, входящие данные
 ├── synonyms.json          смысловые группы и подсказки категорий
 ├── opencode.example.json  шаблон конфига — скопируйте в opencode.json
 ├── opencode.json          ваш конфиг (в .gitignore, не попадёт в репозиторий)
@@ -202,7 +208,8 @@ flowchart TD
 ├── CHANGELOG.md           история изменений — собирается git-cliff
 ├── cliff.toml             правила сборки ченджлога
 ├── .gitignore             исключает окружение, память и ваш конфиг
-├── .venv/                 окружение Python
+├── doc/
+│   └── README.pdf         версия README для рассылки
 └── .opencode/plugins/
     ├── memory-tools/      memory_search · memory_read · memory_save · think · desire_done
     └── inner-voice/       внутренний голос
