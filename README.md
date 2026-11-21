@@ -8,10 +8,13 @@
 
 **Каркас, который становится кем-то, когда в него вселяют память**
 
+![Версия](https://img.shields.io/github/v/tag/intervisionlord/ANIMA?style=flat-square&logo=semver&logoColor=white&color=22C55E&label=version)
 ![Python](https://img.shields.io/badge/Python-3.12-3776AB?style=flat-square&logo=python&logoColor=white)
 ![OpenCode](https://img.shields.io/badge/OpenCode-plugins-00D2A8?style=flat-square)
+![Платформы](https://img.shields.io/badge/platform-Windows%20%7C%20Linux%20%7C%20macOS-4B5563?style=flat-square)
 ![Память](https://img.shields.io/badge/memory-resonant-7C5CFC?style=flat-square)
 ![Голос](https://img.shields.io/badge/voice-inner-F5A623?style=flat-square)
+![Обновление](https://img.shields.io/github/last-commit/intervisionlord/ANIMA?style=flat-square&logo=github&logoColor=white&color=181717)
 ![Лицензия](https://img.shields.io/badge/License-GPLv3-blue?style=flat-square)
 
 </div>
