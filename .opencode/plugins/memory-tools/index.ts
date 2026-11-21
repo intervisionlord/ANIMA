@@ -55,6 +55,21 @@ const asFact = (raw: unknown): Fact | null => {
   return { category, text, tags }
 }
 
+// Модель иногда дописывает мусор в конец JSON-строки (")", перенос, многоточие).
+// Отрезаем всё после последней закрывающей скобки и пробуем разобрать ещё раз.
+const parseLoose = (s: string): unknown => {
+  try {
+    return JSON.parse(s)
+  } catch {}
+  const end = Math.max(s.lastIndexOf("]"), s.lastIndexOf("}"))
+  if (end >= 0) {
+    try {
+      return JSON.parse(s.slice(0, end + 1))
+    } catch {}
+  }
+  return undefined
+}
+
 const asFacts = (raw: unknown): Fact[] => {
   if (raw == null) return []
   const list = Array.isArray(raw) ? raw : [raw]
@@ -63,16 +78,14 @@ const asFacts = (raw: unknown): Fact[] => {
     if (typeof item === "string") {
       const s = item.trim()
       if (!s) continue
-      try {
-        const parsed = JSON.parse(s)
-        if (Array.isArray(parsed)) {
-          for (const inner of parsed) {
-            const got = asFact(inner)
-            if (got) out.push(got)
-          }
-          continue
+      const parsed = parseLoose(s)
+      if (parsed !== undefined) {
+        for (const inner of Array.isArray(parsed) ? parsed : [parsed]) {
+          const got = asFact(inner)
+          if (got) out.push(got)
         }
-      } catch {}
+        continue
+      }
     }
     const got = asFact(item)
     if (got) out.push(got)
@@ -105,18 +118,59 @@ export default Plugin.define({
     const payloadPath = (prefix: string) =>
       join(memoryDir, `${prefix}_${Date.now()}_${payloadSeq++}.json`)
 
+    // Запись идёт по очереди: параллельные `remember` читают один и тот же
+    // файл категории до записи соседа, теряют чужие записи и получают
+    // одинаковый id из _next_id.
+    // Повтор того же факта не создаёт вторую запись: единственная в плагине
+    // защита от зацикливания на memory_save (дедуп в ядре покрывает
+    // только desires и thoughts).
+    const savedFacts = new Map<string, string>()
+    const normalize = (s: string) =>
+      s
+        .toLowerCase()
+        .trim()
+        .replace(/ё/g, "е")
+        .replace(/[—–−]/g, "-")
+        .replace(/\s+/g, " ")
+        .replace(/^[ .,:;!?"'«»]+|[ .,:;!?"'«»]+$/g, "")
+    const factKey = (category: string, text: string, tags: string[]) =>
+      `${category}|${normalize(text)}|${tags
+        .map((t) => normalize(String(t)))
+        .sort()
+        .join(",")}`
+
+    let saveChain: Promise<string> = Promise.resolve("")
     const saveFact = async (category: string, text: string, tags: string[]) => {
-      const payload = payloadPath("_tool")
-      await writeFile(
-        payload,
-        JSON.stringify({ category, content: { text }, tags }),
-        "utf-8",
-      )
-      try {
-        return await run(["remember", payload])
-      } finally {
-        await unlink(payload).catch(() => {})
-      }
+      // Проверка строго синхронная, до первого await: иначе два параллельных
+      // вызова одного факта оба увидят пустой Map.
+      const key = factKey(category, text, tags)
+      const known = savedFacts.get(key)
+      if (known) return `Уже записано как ${known}, дубликат не создан.`
+      savedFacts.set(key, "…")
+
+      const job = saveChain
+        .then(async () => {
+          const payload = payloadPath("_tool")
+          await writeFile(
+            payload,
+            JSON.stringify({ category, content: { text }, tags }),
+            "utf-8",
+          )
+          try {
+            const result = await run(["remember", payload])
+            savedFacts.set(key, result.match(/\b[a-z]+_\d{3}\b/)?.[0] ?? "?")
+            return result
+          } finally {
+            await unlink(payload).catch(() => {})
+          }
+        })
+        .catch((error) => {
+          savedFacts.delete(key) // неудачную запись можно повторить
+          throw error
+        })
+      // Ошибка одного вызова не должна ломать всю цепочку.
+      saveChain = job.catch(() => "")
+      return job
     }
 
     const recentThoughts: string[] = []
@@ -315,7 +369,7 @@ export default Plugin.define({
       editor.add({
         name: "think",
         description:
-          "Записать новые факты и живую мысль хода. Работает и без facts. Перед ответом — последний вызов инструмента.",
+          "Записать новые факты и живую мысль хода. facts передавай массивом объектов {category, text, tags?}: один факт — одна запись, анкету режь на атомы. Не оборачивай массив в JSON-строку. Работает и без facts. Перед ответом — последний вызов инструмента.",
         input: {
           type: "object",
           properties: {
@@ -327,7 +381,7 @@ export default Plugin.define({
             facts: {
               type: "array",
               description:
-                "Новые факты этого хода. Один факт — одна запись. Пустой массив [], если нечего. Элементы — объекты {category, text, tags?}.",
+                "Новые факты этого хода. Передавай именно массивом объектов {category, text, tags?}: один факт — одна запись, анкету режь на атомы. Не передавай JSON-строкой. Пустой массив [], если нечего.",
               items: {
                 anyOf: [
                   {
@@ -355,7 +409,7 @@ export default Plugin.define({
                   {
                     type: "string",
                     description:
-                      "JSON-строка с объектом или массивом фактов. Запасной вариант.",
+                      "Только если никак не получается массивом: JSON-строка с объектом или массивом фактов.",
                   },
                 ],
               },
