@@ -1,5 +1,7 @@
 <div align="center">
 
+![ANIMA](doc/logo.png)
+
 # ANIMA
 
 ### Ассоциативный Накопитель Индивидуальной Мысли Агента
