@@ -3,13 +3,35 @@ import re
 import sys
 from datetime import datetime, timezone
 from pathlib import Path
-from typing import Optional
 
 for _s in (sys.stdout, sys.stderr):
     try:
         _s.reconfigure(encoding="utf-8", errors="replace")
     except (AttributeError, ValueError):
         pass
+
+
+def load_synonyms() -> dict:
+    if not SYNONYM_FILE.exists():
+        return {"groups": [], "categories": {}}
+    try:
+        data = json.loads(SYNONYM_FILE.read_text(encoding="utf-8"))
+    except json.JSONDecodeError:
+        return {"groups": [], "categories": {}}
+    data.setdefault("groups", [])
+    data.setdefault("categories", {})
+    return data
+
+
+def _stem(word: str) -> str:
+    word = word.lower().replace("ё", "е")
+    if len(word) <= 4:
+        return word
+    for suf in _RU_SUFFIXES:
+        if word.endswith(suf) and len(word) - len(suf) >= 3:
+            return word[: -len(suf)]
+    return word[:5] if len(word) > 5 else word
+
 
 ROOT = Path(__file__).parent
 MEMORY_DIR = ROOT / "memory"
@@ -88,33 +110,6 @@ _RU_SUFFIXES = (
     "сь",
 )
 
-
-def _stem(word: str) -> str:
-    word = word.lower().replace("ё", "е")
-    if len(word) <= 4:
-        return word
-    for suf in _RU_SUFFIXES:
-        if word.endswith(suf) and len(word) - len(suf) >= 3:
-            return word[: -len(suf)]
-    return word[:5] if len(word) > 5 else word
-
-
-def _tokens(text: str) -> list:
-    return re.findall(r"[а-яёa-z0-9]+", text.lower())
-
-
-def load_synonyms() -> dict:
-    if not SYNONYM_FILE.exists():
-        return {"groups": [], "categories": {}}
-    try:
-        data = json.loads(SYNONYM_FILE.read_text(encoding="utf-8"))
-    except json.JSONDecodeError:
-        return {"groups": [], "categories": {}}
-    data.setdefault("groups", [])
-    data.setdefault("categories", {})
-    return data
-
-
 SYNONYM_DATA = load_synonyms()
 SYNONYM_NET = {}
 for _group in SYNONYM_DATA["groups"]:
@@ -126,6 +121,10 @@ CATEGORY_HINTS = {}
 for _cat, _words in SYNONYM_DATA["categories"].items():
     for _w in _words:
         CATEGORY_HINTS.setdefault(_stem(_w), set()).add(_cat)
+
+
+def _tokens(text: str) -> list:
+    return re.findall(r"[а-яёa-z0-9]+", text.lower())
 
 
 def _template(category: str) -> dict:
@@ -180,7 +179,7 @@ def _next_id(category: str, memories: list) -> str:
     return f"{category}_{max_n + 1:03d}"
 
 
-def save_memory(category: str, content: dict, tags: Optional[list] = None) -> dict:
+def save_memory(category: str, content: dict, tags: list | None = None) -> dict:
     if category not in CATEGORIES:
         raise ValueError(f"Неизвестная категория: {category}")
     data = _read_category(category)
@@ -199,7 +198,7 @@ def save_memory(category: str, content: dict, tags: Optional[list] = None) -> di
     return entry
 
 
-def save_text(category: str, text: str, tags: Optional[list] = None) -> dict:
+def save_text(category: str, text: str, tags: list | None = None) -> dict:
     return save_memory(category, {"text": text.strip()}, tags)
 
 
@@ -248,7 +247,7 @@ def _jaccard(left: set, right: set) -> float:
     return len(left & right) / len(left | right)
 
 
-def _find_paraphrase(category: str, text: str) -> Optional[dict]:
+def _find_paraphrase(category: str, text: str) -> dict | None:
     if category not in DEDUP_CATEGORIES:
         return None
     needle = _stems(text)
@@ -279,8 +278,8 @@ def _shorten_thought(text: str) -> tuple[str, bool]:
 
 
 def _find_duplicate(
-    category: str, text: str, tags: Optional[list] = None
-) -> Optional[dict]:
+    category: str, text: str, tags: list | None = None
+) -> dict | None:
     key = f"{_normalize(text)}|{','.join(sorted(_normalize(str(t)) for t in (tags or [])))}"
     if key.startswith("|"):
         return None
@@ -363,7 +362,7 @@ def _resonance_score(query_stems: list, memory: dict) -> float:
 
 
 def search_memories(
-    query: str, category: Optional[str] = None, limit: int = 10
+    query: str, category: str | None = None, limit: int = 10
 ) -> list:
     query_stems = [_stem(t) for t in _tokens(query)]
     if not query_stems:
